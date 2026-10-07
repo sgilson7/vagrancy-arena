@@ -65,6 +65,7 @@ async def main():
     ap.add_argument("--music", required=True)
     ap.add_argument("--seed", type=int, default=7)
     ap.add_argument("--no-stream", action="store_true", help="leave the stream off afterwards")
+    ap.add_argument("--music-db", type=float, default=-14.0, help="the music's level in dB (0 is full volume)")
     args = ap.parse_args()
     music = Path(args.music).expanduser()
     if not music.is_file():
@@ -84,6 +85,8 @@ async def main():
         await obs.call("CreateScene", {"sceneName": "Recording"})
         await obs.call("CreateInput", {"sceneName": "Recording", "inputName": "Run music", "inputKind": "ffmpeg_source",
                                        "inputSettings": {"local_file": str(music), "looping": True, "restart_on_activate": True}})
+        # Under the fighting, not over it (Sam: "dont make the music full volume").
+        await obs.call("SetInputVolume", {"inputName": "Run music", "inputVolumeDb": args.music_db})
         stopped = (await obs.call("GetStreamStatus"))["responseData"]["outputActive"]
         if stopped:
             await obs.call("StopStream")
