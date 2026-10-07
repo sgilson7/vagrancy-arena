@@ -77,7 +77,10 @@ async def main():
         url = f"http://127.0.0.1:{PORT}/?player={args.seed}&fresh&tuning=2"
         await obs.call("SetProfileParameter", {"parameterCategory": "SimpleOutput", "parameterName": "FilePath", "parameterValue": str(OUT)})
         await obs.call("SetProfileParameter", {"parameterCategory": "SimpleOutput", "parameterName": "RecFormat2", "parameterValue": "mp4"})
-        await obs.call("SetProfileParameter", {"parameterCategory": "SimpleOutput", "parameterName": "RecQuality", "parameterValue": "HQ"})
+        # "Same as stream": the profile has no recording encoder of its own,
+        # and with "HQ" OBS took the start and never recorded. The stream's
+        # encoder is set to 1080p and a higher bitrate for the run below.
+        await obs.call("SetProfileParameter", {"parameterCategory": "SimpleOutput", "parameterName": "RecQuality", "parameterValue": "Stream"})
         scenes = [s["sceneName"] for s in (await obs.call("GetSceneList"))["responseData"]["scenes"]]
         if "Recording" in scenes:
             await obs.call("RemoveScene", {"sceneName": "Recording"})
@@ -91,9 +94,18 @@ async def main():
         if stopped:
             await obs.call("StopStream")
             await asyncio.sleep(3)
+        # Full HD and a bitrate for keeping, while the stream is off; put
+        # back afterwards.
+        video = (await obs.call("GetVideoSettings"))["responseData"]
+        rate = (await obs.call("GetProfileParameter", {"parameterCategory": "SimpleOutput", "parameterName": "VBitrate"}))["responseData"]["parameterValue"]
+        await obs.call("SetVideoSettings", {**video, "outputWidth": 1920, "outputHeight": 1080})
+        await obs.call("SetProfileParameter", {"parameterCategory": "SimpleOutput", "parameterName": "VBitrate", "parameterValue": "12000"})
         await obs.call("SetCurrentProgramScene", {"sceneName": "Recording"})
         # The game last, so the run starts when the recording does.
         await obs.call("StartRecord")
+        await asyncio.sleep(2)
+        if not (await obs.call("GetRecordStatus"))["responseData"]["outputActive"]:
+            sys.exit("OBS took the start but is not recording; see its log")
         await obs.call("CreateInput", {"sceneName": "Recording", "inputName": "Run game", "inputKind": "browser_source",
                                        "inputSettings": {"url": url, "width": 1920, "height": 1080, "fps": 30, "reroute_audio": True, "restart_when_active": False}})
         await obs.call("SetInputMute", {"inputName": "Run game", "inputMuted": True})
@@ -114,6 +126,9 @@ async def main():
         await asyncio.sleep(6)
         out = (await obs.call("StopRecord"))["responseData"].get("outputPath")
         print("recorded to", out, flush=True)
+        await asyncio.sleep(2)
+        await obs.call("SetVideoSettings", video)
+        await obs.call("SetProfileParameter", {"parameterCategory": "SimpleOutput", "parameterName": "VBitrate", "parameterValue": rate or "3000"})
         await obs.call("SetCurrentProgramScene", {"sceneName": "Arena"})
         await obs.call("RemoveInput", {"inputName": "Run game"})
         if stopped and not args.no_stream:
