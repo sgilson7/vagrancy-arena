@@ -26,7 +26,7 @@ ROOT = Path(__file__).resolve().parents[1]
 CONFIG = json.loads((ROOT / "config.json").read_text())
 log = logging.getLogger("arena")
 
-COMMANDS = {"left": "!left", "right": "!right", "xp": "!xp", "fight": "!fight", "submit": "!submit"}
+COMMANDS = {"left": "!left", "right": "!right", "xp": "!xp", "fight": "!fight", "submit": "!submit", "speed": "!speed", "trees": "!trees"}
 # !speed <word>: how fast exhibitions play. A live !fight always plays at
 # full speed, since its other player is in the game in real time.
 SPEEDS = {"quarter": 0.25, "half": 0.5, "normal": 1, "full": 1, "double": 2}
@@ -263,7 +263,10 @@ class Arena:
         await self.send({"type": "trees", "show": show})
 
     async def send_panels(self):
-        await self.send({"type": "how", **COMMANDS, "cost": CONFIG["fight_cost"]})
+        await self.send({"type": "how", **COMMANDS, "cost": CONFIG["fight_cost"], "submit_cost": CONFIG["submit_cost"],
+                         "speeds": ", ".join(k for k in SPEEDS if k != "full"), "speed_lock": CONFIG.get("speed_lock_seconds", 60),
+                         "trees_on": f"{COMMANDS['trees']} on", "trees_off": f"{COMMANDS['trees']} off",
+                         "trees_minutes": CONFIG.get("trees_hold_seconds", 300) // 60})
         await self.send({"type": "queue", "items": [{"viewer": q["viewer"], "kind": q["kind"]} for q in self.queue[:6]]})
         await self.send({"type": "leaders", "items": self.ledger.leaders(5)})
         await self.send({"type": "predict", "open": self.predict_open, "seconds": max(0, int(self.predict_until - time.time())),
@@ -286,10 +289,10 @@ class Arena:
         self.ledger.seen(login, name, CONFIG["start_xp"])
         word, _, rest = text.partition(" ")
         word = word.lower()
-        if word == "!trees" and rest.strip().lower() in ("on", "off", "sometimes"):
+        if word == COMMANDS["trees"] and rest.strip().lower() in ("on", "off", "sometimes"):
             await self.on_trees(name, rest.strip().lower(), boss)
             return
-        if word == "!speed" and rest.strip().lower() in SPEEDS:
+        if word == COMMANDS["speed"] and rest.strip().lower() in SPEEDS:
             await self.on_speed(name, rest.strip().lower())
             return
         if word in (COMMANDS["left"], COMMANDS["right"]) and self.predict_open:
@@ -313,7 +316,15 @@ class Arena:
             if tree is None:
                 await self.chat.say(f"@{name}, that share code could not be read. Make one in the BT Lab's editor.")
                 return
+            # A tree costs submit_cost experience (Sam, 2026-10-07), taken
+            # before the lab checks it and given back if the lab refuses it.
+            cost = CONFIG["submit_cost"]
+            if not self.ledger.spend(login, cost):
+                await self.chat.say(f"@{name} needs {cost} experience to submit a tree, and has {self.ledger.xp(login)}.")
+                return
             res = await self.check_tree(tree)
+            if not res.get("ok"):
+                self.ledger.add(login, cost)
             if res.get("ok"):
                 self.queue.append({"viewer": name, "login": login, "kind": "tree", "tree": tree})
                 self.ledger.event("tree_submitted", login, tree=tree)

@@ -30,7 +30,7 @@ that sets OBS up.
 | `!left`, `!right` | predict the winner while predictions are open (20 experience if right) |
 | `!xp` | your experience |
 | `!fight` | spend 100 experience for a turn; a join code appears on stream, used in the game's Online mode |
-| `!submit <code>` | queue a tree from the BT Lab's editor (a share code); 100 experience when it fights, 100 more if it wins |
+| `!submit <code>` | spend 1000 experience to queue a tree from the BT Lab's editor (a share code), refunded if the lab refuses it; 100 experience back when it fights, 100 more if it wins |
 
 New viewers start with 50. A missed join is refunded.
 

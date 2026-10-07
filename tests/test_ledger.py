@@ -88,5 +88,27 @@ class SpeedCommandTests(unittest.TestCase):
             self.assertEqual(a.speed, 2, "the lockout did not end on time")
 
 
+class SubmitCostTests(unittest.TestCase):
+    def test_a_tree_costs_the_submit_cost_and_a_refused_tree_gives_it_back(self):
+        import asyncio, base64, json
+        from arena.bot import CONFIG
+        with tempfile.TemporaryDirectory() as d:
+            a = TreesCommandTests.arena(None, d)
+            code = base64.b64encode(json.dumps({"reaction_ticks": 10, "rules": [{"do": "guard"}]}).encode()).decode()
+            verdict = {"ok": True}
+            async def check(tree): return verdict
+            a.check_tree = check
+            asyncio.run(a.on_chat("ann", "Ann", f"!submit {code}", False))
+            self.assertEqual(a.queue, [], "a viewer without the submit cost queued a tree")
+            a.ledger.add("ann", CONFIG["submit_cost"])
+            verdict = {"ok": False, "key": "btlab.editor.refuse.number"}
+            before = a.ledger.xp("ann")
+            asyncio.run(a.on_chat("ann", "Ann", f"!submit {code}", False))
+            self.assertEqual((a.queue, a.ledger.xp("ann")), ([], before), "a refused tree kept the experience")
+            verdict = {"ok": True}
+            asyncio.run(a.on_chat("ann", "Ann", f"!submit {code}", False))
+            self.assertEqual((len(a.queue), a.ledger.xp("ann")), (1, before - CONFIG["submit_cost"]))
+
+
 if __name__ == "__main__":
     unittest.main()

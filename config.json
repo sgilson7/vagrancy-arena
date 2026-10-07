@@ -22,5 +22,6 @@
   "stream_category": "Software and Game Development",
   "trees_hold_seconds": 300,
   "speed_lock_seconds": 60,
-  "stream_description": "Vagrancy arena: predict the winner, fight live, or submit your own behavior tree"
+  "stream_description": "Vagrancy arena: predict the winner, fight live, or submit your own behavior tree",
+  "submit_cost": 1000
 }
