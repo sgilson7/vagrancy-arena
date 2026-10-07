@@ -171,6 +171,7 @@ class Arena:
         self.predict_open = False
         self.predict_until = 0
         self.result = None
+        self.current = None        # the fight message the page is playing
         self.challenge_state = None
         self.checks = {}           # id -> future
         self.chat = Chat(CONFIG["channel"], self.on_chat)
@@ -199,6 +200,12 @@ class Arena:
                     self.roster = m.get("roster", [])
                     await self.send_panels()
                     await self.send({"type": "speed", "value": self.speed})
+                    # A page that comes back mid-fight (OBS reloaded it, say)
+                    # starts with no fight: send it the one under way, or the
+                    # loop waits on a result no page will send.
+                    if self.current is not None and self.result is None:
+                        await self.send_trees()
+                        await self.send(self.current)
                 elif m.get("type") == "result":
                     self.result = m
                 elif m.get("type") == "challenge":
@@ -345,6 +352,7 @@ class Arena:
     # --- the loop ------------------------------------------------------------------------
     async def run_fight(self, msg, predict=True):
         self.result = None
+        self.current = msg
         self.predictions = {}
         self.predict_open = predict
         self.predict_until = time.time() + CONFIG["predict_seconds"]
@@ -361,6 +369,7 @@ class Arena:
                 await self.send_panels()
             await asyncio.sleep(0.5)
         self.predict_open = False
+        self.current = None
         return self.result
 
     def pay_predictions(self, winner):

@@ -110,5 +110,23 @@ class SubmitCostTests(unittest.TestCase):
             self.assertEqual((len(a.queue), a.ledger.xp("ann")), (1, before - CONFIG["submit_cost"]))
 
 
+class PageReturnTests(unittest.TestCase):
+    def test_a_page_that_comes_back_mid_fight_is_sent_the_fight_under_way(self):
+        import asyncio, json
+        with tempfile.TemporaryDirectory() as d:
+            a = TreesCommandTests.arena(None, d)
+            fight = {"type": "exhibition", "left": {"id": "drover"}, "right": {"id": "cooper"}}
+            a.current, a.result = fight, None
+
+            class Page:
+                def __init__(self): self.msgs = [json.dumps({"type": "hello", "roster": ["drover"]})]
+                def __aiter__(self): return self
+                async def __anext__(self):
+                    if not self.msgs: raise StopAsyncIteration
+                    return self.msgs.pop(0)
+            asyncio.run(a.page_handler(Page()))
+            self.assertIn(fight, a.sent, "the page that came back was not sent the fight under way")
+
+
 if __name__ == "__main__":
     unittest.main()
