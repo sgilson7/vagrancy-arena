@@ -16,5 +16,8 @@
   "join_seconds": 120,
   "fight_timeout": 240,
   "between_fights": 6,
-  "trees": "on"
+  "trees": "on",
+  "twitch_client_id": "",
+  "stream_title": "Vagrancy arena: predict the winner, fight live, or submit your own behavior tree",
+  "stream_category": "Software and Game Development"
 }

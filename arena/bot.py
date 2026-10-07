@@ -40,6 +40,61 @@ def keychain(service):
         return None
 
 
+def keychain_set(service, value):
+    subprocess.run(["security", "add-generic-password", "-U", "-a", CONFIG["keychain_account"], "-s", service, "-w", value],
+                   check=True, capture_output=True, timeout=5)
+
+
+def twitch(method, url, token=None, data=None, form=None):
+    """A Twitch API call; the token is sent, never logged."""
+    import urllib.parse, urllib.request
+    headers = {"Client-Id": CONFIG.get("twitch_client_id", "")}
+    body = None
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    if data is not None:
+        headers["Content-Type"] = "application/json"
+        body = json.dumps(data).encode()
+    if form is not None:
+        body = urllib.parse.urlencode(form).encode()
+    req = urllib.request.Request(url, data=body, headers=headers, method=method)
+    try:
+        with urllib.request.urlopen(req, timeout=15) as r:
+            raw = r.read()
+            return json.loads(raw) if raw else {}
+    except Exception as e:
+        log.warning("twitch %s %s failed (%s)", method, url.split("?")[0], type(e).__name__)
+        return None
+
+
+def refresh_token():
+    """A fresh chat token from the refresh token in the Keychain (device
+    sign-in tokens last a few hours). Returns it, or None."""
+    rt = keychain("vagrancy-twitch-refresh-token")
+    if not rt or not CONFIG.get("twitch_client_id"):
+        return None
+    t = twitch("POST", "https://id.twitch.tv/oauth2/token", form={"client_id": CONFIG["twitch_client_id"], "grant_type": "refresh_token", "refresh_token": rt})
+    if not t or "access_token" not in t:
+        return None
+    keychain_set("vagrancy-twitch-chat-token", t["access_token"])
+    keychain_set("vagrancy-twitch-refresh-token", t["refresh_token"])
+    return t["access_token"]
+
+
+def set_stream_info(token):
+    """The stream's title and category, from config.json."""
+    me = twitch("GET", "https://api.twitch.tv/helix/users", token)
+    if not me or not me.get("data"):
+        return
+    uid = me["data"][0]["id"]
+    cat = twitch("GET", "https://api.twitch.tv/helix/games?name=" + __import__("urllib.parse").parse.quote(CONFIG["stream_category"]), token)
+    body = {"title": CONFIG["stream_title"]}
+    if cat and cat.get("data"):
+        body["game_id"] = cat["data"][0]["id"]
+    twitch("PATCH", f"https://api.twitch.tv/helix/channels?broadcaster_id={uid}", token, data=body)
+    log.info("stream title and category set (%s)", CONFIG["stream_category"])
+
+
 class Chat:
     """Twitch chat over its IRC WebSocket. Read-only without a token."""
 
@@ -49,7 +104,9 @@ class Chat:
         self.channel = channel.lower()
         self.on_message = on_message
         self.ws = None
-        self.token = keychain("vagrancy-twitch-chat-token")
+        self.token = refresh_token() or keychain("vagrancy-twitch-chat-token")
+        if self.token:
+            set_stream_info(self.token)
         self.nick = CONFIG.get("bot_nick") if self.token else f"justinfan{random.randint(10000, 99999)}"
 
     @property
@@ -84,6 +141,8 @@ class Chat:
                 log.warning("chat dropped (%s); reconnecting", type(e).__name__)
                 self.ws = None
                 await asyncio.sleep(5)
+                # A dropped connection may be an expired token.
+                self.token = refresh_token() or self.token
 
     async def say(self, text):
         if self.ws and self.token:

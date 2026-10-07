@@ -33,3 +33,15 @@ balance stays.
 ## Stop
 
 `pkill -f arena.bot`, then stop streaming in OBS.
+
+## Letting the bot speak in chat
+
+1. At dev.twitch.tv/console/apps, register an application: any name, OAuth
+   Redirect URL `http://localhost`, Category "Other", Client Type "Public".
+   Copy its Client ID into `config.json` as `twitch_client_id` (not a secret).
+2. `.venv/bin/python obs/twitch_auth.py`, then open twitch.tv/activate, sign in
+   as the channel and enter the code it prints. The tokens go into the
+   Keychain; nothing is printed.
+3. Restart the bot. Its log says "speaking" and it sets the stream title and
+   category from `config.json` (`stream_title`, `stream_category`). It renews
+   the token itself from the refresh token.
