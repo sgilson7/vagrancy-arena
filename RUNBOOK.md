@@ -3,11 +3,14 @@
 For the Claude Code session left to manage the stream. The stream key and
 chat token are in the macOS Keychain; never print, log or commit them.
 
-## Start
+## Start, stop, and the rest
 
-1. `cd ~/Documents/vagrancy-arena`
-2. `nohup .venv/bin/python -m arena.bot >> logs/bot.out 2>&1 &`
-3. `.venv/bin/python obs/setup_obs.py --start`
+`./stream.sh start|stop|status|refresh|say <text>|leaders|log`. Under the
+hood, start is the bot (`nohup .venv/bin/python -m arena.bot >> logs/bot.out
+2>&1 &`) and OBS (`obs/setup_obs.py --start`, or obs-websocket's StartStream
+when OBS is already open). `say` posts as the channel's account, so the
+broadcaster's commands (`!trees`, `!speed`) work from it. Sam's Claude Code
+skill `vagrancy-stream` drives this script.
 
 ## Every few minutes
 
@@ -32,7 +35,7 @@ balance stays.
 
 ## Stop
 
-`pkill -f arena.bot`, then stop streaming in OBS.
+`./stream.sh stop`.
 
 ## Letting the bot speak in chat
 
