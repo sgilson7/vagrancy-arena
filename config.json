@@ -18,7 +18,9 @@
   "between_fights": 6,
   "trees": "on",
   "twitch_client_id": "8w9cxu3dlscq4ra1bj76jt0qtdqn63",
-  "stream_title": "Vagrancy arena: predict the winner, fight live, or submit your own behavior tree",
+  "stream_title": "Vagrancy",
   "stream_category": "Software and Game Development",
-  "trees_hold_seconds": 300
+  "trees_hold_seconds": 300,
+  "speed_lock_seconds": 60,
+  "stream_description": "Vagrancy arena: predict the winner, fight live, or submit your own behavior tree"
 }

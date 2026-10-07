@@ -1,4 +1,5 @@
-"""Let the bot speak in chat and set the stream's title and category.
+"""Let the bot speak in chat and set the stream's title and category
+and the channel's description.
 
     .venv/bin/python obs/twitch_auth.py
 
@@ -15,7 +16,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 CONFIG = json.loads((ROOT / "config.json").read_text())
-SCOPES = "chat:read chat:edit channel:manage:broadcast"
+SCOPES = "chat:read chat:edit channel:manage:broadcast user:edit"
 
 
 def post(url, data):

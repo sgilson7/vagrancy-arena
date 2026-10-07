@@ -71,5 +71,22 @@ class TreesCommandTests(unittest.TestCase):
             self.assertEqual(a.trees, "sometimes")
 
 
+class SpeedCommandTests(unittest.TestCase):
+    def test_a_speed_change_locks_out_the_next_one_for_a_minute(self):
+        import asyncio
+        from arena.bot import CONFIG
+        with tempfile.TemporaryDirectory() as d:
+            a = TreesCommandTests.arena(None, d)
+            asyncio.run(a.on_chat("viewer", "Viewer", "!speed quarter", False))
+            self.assertEqual(a.speed, 0.25)
+            self.assertIn({"type": "speed", "value": 0.25}, a.sent)
+            a.clock += CONFIG["speed_lock_seconds"] - 1
+            asyncio.run(a.on_chat("sam", "Sam", "!speed double", True))
+            self.assertEqual(a.speed, 0.25, "the speed changed during the lockout")
+            a.clock += 2
+            asyncio.run(a.on_chat("other", "Other", "!speed double", False))
+            self.assertEqual(a.speed, 2, "the lockout did not end on time")
+
+
 if __name__ == "__main__":
     unittest.main()

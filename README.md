@@ -41,6 +41,11 @@ to the standing setting. The broadcaster and moderators can make the standing
 setting `!trees sometimes` (about half the fights); `"trees"` in
 `config.json` is where it starts.
 
+Anyone can type `!speed quarter`, `!speed half`, `!speed normal` or
+`!speed double` to change how fast the fights play. It stays at that speed,
+and nobody can change it again for a minute (`speed_lock_seconds`). A live
+`!fight` always plays at normal speed, since its player is in real time.
+
 ## Running it
 
 ```

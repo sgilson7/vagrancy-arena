@@ -27,6 +27,9 @@ CONFIG = json.loads((ROOT / "config.json").read_text())
 log = logging.getLogger("arena")
 
 COMMANDS = {"left": "!left", "right": "!right", "xp": "!xp", "fight": "!fight", "submit": "!submit"}
+# !speed <word>: how fast exhibitions play. A live !fight always plays at
+# full speed, since its other player is in the game in real time.
+SPEEDS = {"quarter": 0.25, "half": 0.5, "normal": 1, "full": 1, "double": 2}
 ROOM_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"
 
 
@@ -93,6 +96,14 @@ def set_stream_info(token):
         body["game_id"] = cat["data"][0]["id"]
     twitch("PATCH", f"https://api.twitch.tv/helix/channels?broadcaster_id={uid}", token, data=body)
     log.info("stream title and category set (%s)", CONFIG["stream_category"])
+    # The channel's description needs user:edit, granted by a sign-in made
+    # after it was added to obs/twitch_auth.py.
+    v = twitch("GET", "https://id.twitch.tv/oauth2/validate", token)
+    if v and "user:edit" in v.get("scopes", []) and CONFIG.get("stream_description"):
+        twitch("PUT", "https://api.twitch.tv/helix/users?description=" + __import__("urllib.parse").parse.quote(CONFIG["stream_description"]), token)
+        log.info("channel description set")
+    else:
+        log.info("channel description not set: sign in again with obs/twitch_auth.py to allow it")
 
 
 class Chat:
@@ -172,6 +183,10 @@ class Arena:
         self.trees_held = None
         self.held_until = 0
         self.now = time.monotonic
+        # Anyone's !speed sticks, and locks out the next one for
+        # speed_lock_seconds.
+        self.speed = 1
+        self.speed_locked_until = 0
 
     # --- the page ------------------------------------------------------------------------
     async def page_handler(self, ws):
@@ -183,6 +198,7 @@ class Arena:
                 if m.get("type") == "hello":
                     self.roster = m.get("roster", [])
                     await self.send_panels()
+                    await self.send({"type": "speed", "value": self.speed})
                 elif m.get("type") == "result":
                     self.result = m
                 elif m.get("type") == "challenge":
@@ -232,6 +248,16 @@ class Arena:
         await self.chat.say(f"{name} turned the trees {arg} for {hold // 60} minutes. Nobody can change it until then.")
         asyncio.create_task(self.release_trees(self.held_until))
 
+    async def on_speed(self, name, arg):
+        left = self.speed_locked_until - self.now()
+        if left > 0:
+            await self.chat.say(f"@{name} the speed can change again in {int(left) + 1} seconds.")
+            return
+        self.speed = SPEEDS[arg]
+        self.speed_locked_until = self.now() + CONFIG.get("speed_lock_seconds", 60)
+        await self.send({"type": "speed", "value": self.speed})
+        await self.chat.say(f"{name} set the speed to {arg}. It can change again in {CONFIG.get('speed_lock_seconds', 60)} seconds.")
+
     async def send_trees(self):
         show = self.trees == "on" or (self.trees == "sometimes" and random.random() < 0.5)
         await self.send({"type": "trees", "show": show})
@@ -262,6 +288,9 @@ class Arena:
         word = word.lower()
         if word == "!trees" and rest.strip().lower() in ("on", "off", "sometimes"):
             await self.on_trees(name, rest.strip().lower(), boss)
+            return
+        if word == "!speed" and rest.strip().lower() in SPEEDS:
+            await self.on_speed(name, rest.strip().lower())
             return
         if word in (COMMANDS["left"], COMMANDS["right"]) and self.predict_open:
             self.predictions[login] = 0 if word == COMMANDS["left"] else 1
@@ -311,8 +340,11 @@ class Arena:
         await self.send_trees()
         await self.send(msg)
         await self.send_panels()
-        start = time.time()
-        while self.result is None and time.time() - start < CONFIG["fight_timeout"]:
+        # The timeout counts fight time, so a quarter-speed fight gets four
+        # times as long on the clock.
+        played = 0
+        while self.result is None and played < CONFIG["fight_timeout"]:
+            played += 0.5 * self.speed
             if self.predict_open and time.time() > self.predict_until:
                 self.predict_open = False
                 await self.send_panels()
