@@ -1,0 +1,19 @@
+{
+  "channel": "emracoool",
+  "bot_nick": "emracoool",
+  "keychain_account": "sgilson7",
+  "port": 8787,
+  "arena_url": "https://sgilson7.github.io/vagrancy/arena.html?bot=ws://127.0.0.1:8787",
+  "ledger": "arena.sqlite",
+  "irb_approval": "",
+  "start_xp": 50,
+  "predict_reward": 20,
+  "fight_cost": 100,
+  "challenge_win_reward": 150,
+  "tree_reward": 100,
+  "tree_win_reward": 100,
+  "predict_seconds": 25,
+  "join_seconds": 120,
+  "fight_timeout": 240,
+  "between_fights": 6
+}
