@@ -34,9 +34,12 @@ that sets OBS up.
 
 New viewers start with 50. A missed join is refunded.
 
-The broadcaster and moderators can also type `!trees off`, `!trees on`, or
-`!trees sometimes` (about half the fights) to hide or show the behavior
-trees over the fighters; `"trees"` in `config.json` is where it starts.
+Anyone can type `!trees off` or `!trees on` to hide or show the behavior
+trees over the fighters for five minutes (`trees_hold_seconds`); while that
+holds, nobody, moderators included, can change it, and then the trees go back
+to the standing setting. The broadcaster and moderators can make the standing
+setting `!trees sometimes` (about half the fights); `"trees"` in
+`config.json` is where it starts.
 
 ## Running it
 

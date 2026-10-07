@@ -36,18 +36,39 @@ class LedgerTests(unittest.TestCase):
 
 
 class TreesCommandTests(unittest.TestCase):
-    def test_only_the_broadcaster_or_a_moderator_can_turn_the_trees_off(self):
+    def arena(self, d):
+        a = Arena(ledger_path=Path(d) / "x.sqlite", chat=False)
+        a.sent, a.said, a.clock = [], [], 1000.0
+        async def send(msg): a.sent.append(msg)
+        async def say(text): a.said.append(text)
+        a.send, a.chat.say, a.now = send, say, lambda: a.clock
+        return a
+
+    def test_a_viewer_turns_the_trees_off_and_nobody_can_turn_them_back_until_the_hold_ends(self):
+        import asyncio
+        from arena.bot import CONFIG
+        with tempfile.TemporaryDirectory() as d:
+            a = self.arena(d)
+            asyncio.run(a.on_chat("viewer", "Viewer", "!trees off", False))
+            self.assertEqual(a.trees, "off")
+            self.assertIn({"type": "trees", "show": False}, a.sent)
+            a.clock += CONFIG["trees_hold_seconds"] - 1
+            asyncio.run(a.on_chat("sam", "Sam", "!trees on", True))
+            asyncio.run(a.on_chat("sam", "Sam", "!trees sometimes", True))
+            self.assertEqual(a.trees, "off", "a moderator changed the trees during a hold")
+            a.clock += 2
+            self.assertEqual(a.trees, "on", "the hold did not end on time")
+            asyncio.run(a.on_chat("viewer", "Viewer", "!trees off", False))
+            self.assertEqual(a.trees, "off", "a new hold could not start after the last one ended")
+
+    def test_only_the_broadcaster_or_a_moderator_can_set_the_trees_to_sometimes(self):
         import asyncio
         with tempfile.TemporaryDirectory() as d:
-            a = Arena(ledger_path=Path(d) / "x.sqlite", chat=False)
-            sent = []
-            async def send(msg): sent.append(msg)
-            a.send = send
-            asyncio.run(a.on_chat("viewer", "Viewer", "!trees off", False))
+            a = self.arena(d)
+            asyncio.run(a.on_chat("viewer", "Viewer", "!trees sometimes", False))
             self.assertEqual(a.trees, "on")
-            asyncio.run(a.on_chat("sam", "Sam", "!trees off", True))
-            self.assertEqual(a.trees, "off")
-            self.assertIn({"type": "trees", "show": False}, sent)
+            asyncio.run(a.on_chat("sam", "Sam", "!trees sometimes", True))
+            self.assertEqual(a.trees, "sometimes")
 
 
 if __name__ == "__main__":

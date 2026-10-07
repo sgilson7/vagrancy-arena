@@ -164,9 +164,14 @@ class Arena:
         self.checks = {}           # id -> future
         self.chat = Chat(CONFIG["channel"], self.on_chat)
         # The trees over the fighters: "on", "off", or "sometimes" (each
-        # fight drawn with them about half the time). Set by the broadcaster
-        # or a moderator with !trees, or in config.json.
-        self.trees = CONFIG.get("trees", "on")
+        # fight drawn with them about half the time). The standing setting
+        # comes from config.json or a moderator's !trees sometimes; anyone's
+        # !trees on|off holds for trees_hold_seconds, and while it holds
+        # nobody, moderators included, can change it.
+        self.trees_standing = CONFIG.get("trees", "on")
+        self.trees_held = None
+        self.held_until = 0
+        self.now = time.monotonic
 
     # --- the page ------------------------------------------------------------------------
     async def page_handler(self, ws):
@@ -198,6 +203,35 @@ class Arena:
             except Exception:
                 self.page = None
 
+    @property
+    def trees(self):
+        return self.trees_held if self.trees_held and self.now() < self.held_until else self.trees_standing
+
+    async def release_trees(self, until):
+        await asyncio.sleep(max(0, until - self.now()))
+        if self.held_until == until:
+            self.trees_held = None
+            await self.send_trees()
+            await self.chat.say(f"The hold is over. Trees: {self.trees}.")
+
+    async def on_trees(self, name, arg, boss):
+        left = self.held_until - self.now()
+        if self.trees_held and left > 0:
+            await self.chat.say(f"@{name} trees are held {self.trees_held} for another {int(left) // 60}:{int(left) % 60:02d}.")
+            return
+        if arg == "sometimes":
+            if boss:
+                self.trees_held = None
+                self.trees_standing = arg
+                await self.send_trees()
+                await self.chat.say("Trees: sometimes.")
+            return
+        hold = CONFIG.get("trees_hold_seconds", 300)
+        self.trees_held, self.held_until = arg, self.now() + hold
+        await self.send_trees()
+        await self.chat.say(f"{name} turned the trees {arg} for {hold // 60} minutes. Nobody can change it until then.")
+        asyncio.create_task(self.release_trees(self.held_until))
+
     async def send_trees(self):
         show = self.trees == "on" or (self.trees == "sometimes" and random.random() < 0.5)
         await self.send({"type": "trees", "show": show})
@@ -226,10 +260,8 @@ class Arena:
         self.ledger.seen(login, name, CONFIG["start_xp"])
         word, _, rest = text.partition(" ")
         word = word.lower()
-        if word == "!trees" and boss and rest.strip().lower() in ("on", "off", "sometimes"):
-            self.trees = rest.strip().lower()
-            await self.send_trees()
-            await self.chat.say(f"Trees: {self.trees}.")
+        if word == "!trees" and rest.strip().lower() in ("on", "off", "sometimes"):
+            await self.on_trees(name, rest.strip().lower(), boss)
             return
         if word in (COMMANDS["left"], COMMANDS["right"]) and self.predict_open:
             self.predictions[login] = 0 if word == COMMANDS["left"] else 1
