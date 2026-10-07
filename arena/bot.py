@@ -77,7 +77,9 @@ class Chat:
                             if m:
                                 tags = dict(kv.split("=", 1) for kv in (m.group(1) or "").split(";") if "=" in kv)
                                 name = tags.get("display-name") or m.group(2)
-                                await self.on_message(m.group(2).lower(), name, m.group(3).strip())
+                                badges = tags.get("badges", "")
+                                boss = "broadcaster/" in badges or "moderator/" in badges
+                                await self.on_message(m.group(2).lower(), name, m.group(3).strip(), boss)
             except Exception as e:
                 log.warning("chat dropped (%s); reconnecting", type(e).__name__)
                 self.ws = None
@@ -102,6 +104,10 @@ class Arena:
         self.challenge_state = None
         self.checks = {}           # id -> future
         self.chat = Chat(CONFIG["channel"], self.on_chat)
+        # The trees over the fighters: "on", "off", or "sometimes" (each
+        # fight drawn with them about half the time). Set by the broadcaster
+        # or a moderator with !trees, or in config.json.
+        self.trees = CONFIG.get("trees", "on")
 
     # --- the page ------------------------------------------------------------------------
     async def page_handler(self, ws):
@@ -133,6 +139,10 @@ class Arena:
             except Exception:
                 self.page = None
 
+    async def send_trees(self):
+        show = self.trees == "on" or (self.trees == "sometimes" and random.random() < 0.5)
+        await self.send({"type": "trees", "show": show})
+
     async def send_panels(self):
         await self.send({"type": "how", **COMMANDS, "cost": CONFIG["fight_cost"]})
         await self.send({"type": "queue", "items": [{"viewer": q["viewer"], "kind": q["kind"]} for q in self.queue[:6]]})
@@ -153,10 +163,15 @@ class Arena:
             return {"ok": False, "key": "timeout"}
 
     # --- chat ----------------------------------------------------------------------------
-    async def on_chat(self, login, name, text):
+    async def on_chat(self, login, name, text, boss=False):
         self.ledger.seen(login, name, CONFIG["start_xp"])
         word, _, rest = text.partition(" ")
         word = word.lower()
+        if word == "!trees" and boss and rest.strip().lower() in ("on", "off", "sometimes"):
+            self.trees = rest.strip().lower()
+            await self.send_trees()
+            await self.chat.say(f"Trees: {self.trees}.")
+            return
         if word in (COMMANDS["left"], COMMANDS["right"]) and self.predict_open:
             self.predictions[login] = 0 if word == COMMANDS["left"] else 1
             self.ledger.event("predict", login, side=self.predictions[login])
@@ -202,6 +217,7 @@ class Arena:
         self.predictions = {}
         self.predict_open = predict
         self.predict_until = time.time() + CONFIG["predict_seconds"]
+        await self.send_trees()
         await self.send(msg)
         await self.send_panels()
         start = time.time()
@@ -231,6 +247,7 @@ class Arena:
             opponent = random.choice(fightable)
             self.challenge_state = None
             self.result = None
+            await self.send_trees()
             await self.send({"type": "challenge", "code": code, "viewer": turn["viewer"], "opponent": opponent})
             await self.chat.say(f"@{turn['viewer']}, your turn: open sgilson7.github.io/vagrancy, choose Online, join room {code}, and press Ready.")
             self.ledger.event("challenge_started", turn["login"], opponent=opponent)

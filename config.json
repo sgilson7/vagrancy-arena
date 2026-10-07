@@ -15,5 +15,6 @@
   "predict_seconds": 25,
   "join_seconds": 120,
   "fight_timeout": 240,
-  "between_fights": 6
+  "between_fights": 6,
+  "trees": "on"
 }

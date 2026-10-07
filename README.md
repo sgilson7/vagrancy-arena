@@ -34,6 +34,10 @@ that sets OBS up.
 
 New viewers start with 50. A missed join is refunded.
 
+The broadcaster and moderators can also type `!trees off`, `!trees on`, or
+`!trees sometimes` (about half the fights) to hide or show the behavior
+trees over the fighters; `"trees"` in `config.json` is where it starts.
+
 ## Running it
 
 ```

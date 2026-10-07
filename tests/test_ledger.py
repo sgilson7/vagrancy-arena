@@ -35,5 +35,20 @@ class LedgerTests(unittest.TestCase):
         self.assertIsNone(Arena.decode("not a code"))
 
 
+class TreesCommandTests(unittest.TestCase):
+    def test_only_the_broadcaster_or_a_moderator_can_turn_the_trees_off(self):
+        import asyncio
+        with tempfile.TemporaryDirectory() as d:
+            a = Arena(ledger_path=Path(d) / "x.sqlite", chat=False)
+            sent = []
+            async def send(msg): sent.append(msg)
+            a.send = send
+            asyncio.run(a.on_chat("viewer", "Viewer", "!trees off", False))
+            self.assertEqual(a.trees, "on")
+            asyncio.run(a.on_chat("sam", "Sam", "!trees off", True))
+            self.assertEqual(a.trees, "off")
+            self.assertIn({"type": "trees", "show": False}, sent)
+
+
 if __name__ == "__main__":
     unittest.main()
