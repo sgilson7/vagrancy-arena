@@ -94,8 +94,8 @@ def set_stream_info(token):
     body = {"title": CONFIG["stream_title"]}
     if cat and cat.get("data"):
         body["game_id"] = cat["data"][0]["id"]
-    twitch("PATCH", f"https://api.twitch.tv/helix/channels?broadcaster_id={uid}", token, data=body)
-    log.info("stream title and category set (%s)", CONFIG["stream_category"])
+    if twitch("PATCH", f"https://api.twitch.tv/helix/channels?broadcaster_id={uid}", token, data=body) is not None:
+        log.info("stream title and category set (%s)", CONFIG["stream_category"])
     # The channel's description needs user:edit, granted by a sign-in made
     # after it was added to obs/twitch_auth.py.
     v = twitch("GET", "https://id.twitch.tv/oauth2/validate", token)
