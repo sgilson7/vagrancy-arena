@@ -2,6 +2,7 @@
 arena scene's source. The password is read from the Keychain.
 
     .venv/bin/python obs/status.py [request ...]   e.g. StartStream
+    .venv/bin/python obs/status.py --refresh       reload the arena page, cache skipped
 """
 import asyncio, base64, hashlib, json, subprocess, sys
 from pathlib import Path
@@ -34,7 +35,10 @@ async def main():
             ident["authentication"] = base64.b64encode(hashlib.sha256((secret + a["challenge"]).encode()).digest()).decode()
         await ws.send(json.dumps({"op": 1, "d": ident}))
         json.loads(await ws.recv())
-        for r in sys.argv[1:]:
+        if "--refresh" in sys.argv:
+            r = await call(ws, "PressInputPropertiesButton", {"inputName": "Arena page", "propertyName": "refreshnocache"})
+            print("refreshed:", r.get("requestStatus", {}).get("result"))
+        for r in [a for a in sys.argv[1:] if not a.startswith("--")]:
             print(r, json.dumps(await call(ws, r))[:300])
         st = await call(ws, "GetStreamStatus")
         print("streaming:", st.get("responseData", {}).get("outputActive"), "| reconnecting:", st.get("responseData", {}).get("outputReconnecting"),
