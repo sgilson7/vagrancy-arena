@@ -87,6 +87,25 @@ class SpeedCommandTests(unittest.TestCase):
             asyncio.run(a.on_chat("other", "Other", "!speed double", False))
             self.assertEqual(a.speed, 2, "the lockout did not end on time")
 
+    def test_costumes_turn_off_and_on_and_lock_for_a_minute(self):
+        # Sam, 2026-10-08: "costumes can be turned off in the stream with a
+        # command".
+        import asyncio
+        from arena.bot import CONFIG
+        with tempfile.TemporaryDirectory() as d:
+            a = TreesCommandTests.arena(None, d)
+            self.assertTrue(a.costumes, "the costumes start off")
+            asyncio.run(a.on_chat("viewer", "Viewer", "!costumes off", False))
+            self.assertFalse(a.costumes)
+            self.assertIn({"type": "costumes", "show": False}, a.sent)
+            a.clock += CONFIG["costumes_lock_seconds"] - 1
+            asyncio.run(a.on_chat("other", "Other", "!costumes on", False))
+            self.assertFalse(a.costumes, "the costumes changed during the lockout")
+            a.clock += 2
+            asyncio.run(a.on_chat("other", "Other", "!costumes on", False))
+            self.assertTrue(a.costumes, "the lockout did not end on time")
+            self.assertIn({"type": "costumes", "show": True}, a.sent)
+
 
 class SubmitCostTests(unittest.TestCase):
     def test_a_tree_costs_the_submit_cost_and_a_refused_tree_gives_it_back(self):

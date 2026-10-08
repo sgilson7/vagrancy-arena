@@ -26,7 +26,7 @@ ROOT = Path(__file__).resolve().parents[1]
 CONFIG = json.loads((ROOT / "config.json").read_text())
 log = logging.getLogger("arena")
 
-COMMANDS = {"left": "!left", "right": "!right", "xp": "!xp", "fight": "!fight", "submit": "!submit", "speed": "!speed", "trees": "!trees"}
+COMMANDS = {"left": "!left", "right": "!right", "xp": "!xp", "fight": "!fight", "submit": "!submit", "speed": "!speed", "trees": "!trees", "costumes": "!costumes"}
 # !speed <word>: how fast exhibitions play. A live !fight always plays at
 # full speed, since its other player is in the game in real time.
 SPEEDS = {"quarter": 0.25, "half": 0.5, "normal": 1, "full": 1, "double": 2}
@@ -222,6 +222,12 @@ class Arena:
         # speed_lock_seconds.
         self.speed = 1
         self.speed_locked_until = 0
+        # The opponents' costumes (Sam, 2026-10-08: "costumes can be turned
+        # off in the stream with a command"): on unless config.json says
+        # otherwise; anyone's !costumes on|off sticks and locks out the next
+        # one for costumes_lock_seconds.
+        self.costumes = CONFIG.get("costumes", "on") != "off"
+        self.costumes_locked_until = 0
 
     # --- the page ------------------------------------------------------------------------
     async def page_handler(self, ws):
@@ -234,6 +240,7 @@ class Arena:
                     self.roster = m.get("roster", [])
                     await self.send_panels()
                     await self.send({"type": "speed", "value": self.speed})
+                    await self.send({"type": "costumes", "show": self.costumes})
                     # A page that comes back mid-fight (OBS reloaded it, say)
                     # starts with no fight: send it the one under way, or the
                     # loop waits on a result no page will send.
@@ -299,6 +306,17 @@ class Arena:
         await self.send({"type": "speed", "value": self.speed})
         await self.chat.say(f"{name} set the speed to {arg}. It can change again in {CONFIG.get('speed_lock_seconds', 60)} seconds.")
 
+    async def on_costumes(self, name, arg):
+        left = self.costumes_locked_until - self.now()
+        if left > 0:
+            await self.chat.say(f"@{name} the costumes can change again in {int(left) + 1} seconds.")
+            return
+        lock = CONFIG.get("costumes_lock_seconds", 60)
+        self.costumes = arg == "on"
+        self.costumes_locked_until = self.now() + lock
+        await self.send({"type": "costumes", "show": self.costumes})
+        await self.chat.say(f"{name} turned the costumes {arg}. They can change again in {lock} seconds.")
+
     async def send_trees(self):
         show = self.trees == "on" or (self.trees == "sometimes" and random.random() < 0.5)
         await self.send({"type": "trees", "show": show})
@@ -307,7 +325,9 @@ class Arena:
         await self.send({"type": "how", **COMMANDS, "cost": CONFIG["fight_cost"], "submit_cost": CONFIG["submit_cost"],
                          "speeds": ", ".join(k for k in SPEEDS if k != "full"), "speed_lock": CONFIG.get("speed_lock_seconds", 60),
                          "trees_on": f"{COMMANDS['trees']} on", "trees_off": f"{COMMANDS['trees']} off",
-                         "trees_minutes": CONFIG.get("trees_hold_seconds", 300) // 60})
+                         "trees_minutes": CONFIG.get("trees_hold_seconds", 300) // 60,
+                         "costumes_on": f"{COMMANDS['costumes']} on", "costumes_off": f"{COMMANDS['costumes']} off",
+                         "costumes_lock": CONFIG.get("costumes_lock_seconds", 60)})
         await self.send({"type": "queue", "items": [{"viewer": q["viewer"], "kind": q["kind"]} for q in self.queue[:6]]})
         await self.send({"type": "leaders", "items": self.ledger.leaders(5)})
         await self.send({"type": "predict", "open": self.predict_open, "seconds": max(0, int(self.predict_until - time.time())),
@@ -332,6 +352,9 @@ class Arena:
         word = word.lower()
         if word == COMMANDS["trees"] and rest.strip().lower() in ("on", "off", "sometimes"):
             await self.on_trees(name, rest.strip().lower(), boss)
+            return
+        if word == COMMANDS["costumes"] and rest.strip().lower() in ("on", "off"):
+            await self.on_costumes(name, rest.strip().lower())
             return
         if word == COMMANDS["speed"] and rest.strip().lower() in SPEEDS:
             await self.on_speed(name, rest.strip().lower())
