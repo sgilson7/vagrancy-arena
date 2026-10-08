@@ -128,5 +128,21 @@ class PageReturnTests(unittest.TestCase):
             self.assertIn(fight, a.sent, "the page that came back was not sent the fight under way")
 
 
+class DenyPairsTests(unittest.TestCase):
+    def test_a_denied_pair_is_never_picked_and_a_timed_out_one_is_added(self):
+        import arena.bot as bot
+        with tempfile.TemporaryDirectory() as d:
+            old = bot.DENY_PATH
+            bot.DENY_PATH = Path(d) / "deny.json"
+            try:
+                bot.DENY_PATH.write_text('{"pairs": [["gatekeeper", "mason"]]}')
+                for _ in range(300):
+                    self.assertNotEqual(set(bot.pick_pair(["mason", "gatekeeper", "drover"])), {"mason", "gatekeeper"})
+                bot.deny("drover", "mason")
+                self.assertIn(("drover", "mason"), bot.denied())
+            finally:
+                bot.DENY_PATH = old
+
+
 if __name__ == "__main__":
     unittest.main()

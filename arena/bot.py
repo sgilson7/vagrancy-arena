@@ -30,6 +30,40 @@ COMMANDS = {"left": "!left", "right": "!right", "xp": "!xp", "fight": "!fight", 
 # !speed <word>: how fast exhibitions play. A live !fight always plays at
 # full speed, since its other player is in the game in real time.
 SPEEDS = {"quarter": 0.25, "half": 0.5, "normal": 1, "full": 1, "double": 2}
+# Pairs the stream does not put together (deny_pairs.json): ones that
+# stand off and do nothing (Sam, 2026-10-08: "mason vs gatekeeper is not a
+# good battle pair ... keep a deny list of pairs for the stream").
+DENY_PATH = ROOT / "deny_pairs.json"
+
+
+def denied():
+    try:
+        return {tuple(sorted(p)) for p in json.loads(DENY_PATH.read_text())["pairs"]}
+    except (OSError, ValueError, KeyError):
+        return set()
+
+
+def deny(a, b):
+    try:
+        d = json.loads(DENY_PATH.read_text())
+    except (OSError, ValueError):
+        d = {"pairs": []}
+    pair = sorted([a, b])
+    if pair not in [sorted(p) for p in d["pairs"]]:
+        d["pairs"].append(pair)
+        DENY_PATH.write_text(json.dumps(d, indent=1) + "\n")
+
+
+def pick_pair(fightable):
+    """Two fighters the stream has not denied as a pair."""
+    no = denied()
+    for _ in range(200):
+        a, b = random.sample(fightable, 2)
+        if tuple(sorted((a, b))) not in no:
+            return a, b
+    return random.sample(fightable, 2)
+
+
 ROOM_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"
 
 
@@ -401,7 +435,8 @@ class Arena:
                 self.ledger.add(turn["login"], CONFIG["fight_cost"])  # refunded
                 self.ledger.event("challenge_missed", turn["login"])
                 await self.chat.say(f"@{turn['viewer']} did not join in time; the experience is refunded.")
-                await self.send({"type": "exhibition", "left": {"id": random.choice(fightable)}, "right": {"id": random.choice(fightable)}})
+                l, r = pick_pair(fightable)
+                await self.send({"type": "exhibition", "left": {"id": l}, "right": {"id": r}})
                 return
             start = time.time()
             while self.result is None and time.time() - start < CONFIG["fight_timeout"]:
@@ -423,8 +458,12 @@ class Arena:
                     self.ledger.add(turn["login"], CONFIG["tree_win_reward"])
             self.ledger.event("tree_fought", turn["login"], opponent=opponent, result=res)
         else:
-            left, right = random.sample(fightable, 2)
+            left, right = pick_pair(fightable)
             res = await self.run_fight({"type": "exhibition", "left": {"id": left}, "right": {"id": right}})
+            if res is None:
+                # Ran out its time with nobody winning: not again.
+                deny(left, right)
+                log.info("denied the pair %s and %s: their fight ran out of time", left, right)
             if res and res.get("winner") is not None:
                 n = self.pay_predictions(res["winner"])
                 if n:
